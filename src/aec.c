@@ -9,6 +9,7 @@
 #include "webrtc/modules/audio_processing/aec/include/echo_cancellation.h"
 #include "webrtc/modules/audio_processing/aec/aec_core.h"
 #include "webrtc/modules/audio_processing/aec/aec_core_internal.h"
+#include "webrtc/modules/audio_processing/aec/echo_cancellation_internal.h"
 
 void *audio_process_aec_create(int sample_rate, const char *profile_path)
 {
@@ -43,6 +44,13 @@ void *audio_process_aec_create(int sample_rate, const char *profile_path)
 	struct AecCore *core = WebRtcAec_aec_core(h->aec);
 	WebRtcAec_enable_delay_agnostic(core, cfg.delay_agnostic ? 1 : 0);
 	WebRtcAec_enable_extended_filter(core, cfg.extended_filter ? 1 : 0);
+	/* The Ingenic audio driver hands the far-end reference time-aligned with
+	 * the capture (0 or ~12 ms lead, chosen per stream start).  WebRTC's
+	 * startup phase rewinds the far-end buffer by its delay estimate first;
+	 * with a 0 ms lead that rewind misaligned the filter, which then never
+	 * converged for the whole stream (flat ~20 dB echo attenuation on the
+	 * T10, both libimps).  Skip it: both lead states converge (32-37 dB). */
+	((Aec *)h->aec)->startup_phase = 0;
 
 	if (cfg.user_mode) {
 		core->ingenic_ext_enabled = 1;
